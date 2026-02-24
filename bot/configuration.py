@@ -176,12 +176,17 @@ class SecretsConfig(ConfigHelper):
         self.passwd: str = self._get_str("password", default="")
         self.api_token: str = self._get_str("api_token", default="")
 
+    @property
+    def message_thread_id(self) -> Optional[int]:
+        return self._get_int("message_thread_id", default=None)
+
 
 class BotConfig(ConfigHelper):
     _section = "bot"
     _KNOWN_ITEMS = [
         "bot_token",
         "chat_id",
+        "message_thread_id",
         "user",
         "password",
         "api_token",
@@ -218,6 +223,7 @@ class BotConfig(ConfigHelper):
         self.upload_path: str = self._get_str("upload_path", default="")
         self.services: List[str] = self._get_list("services", default=["klipper", "moonraker"])
         self.log_parser: bool = self._get_boolean("log_parser", default=False)
+        self.message_thread_id: Optional[int] = self._get_int("message_thread_id", default=0) if config.has_option(self._section, "message_thread_id") else None
 
         host_parts = self.host.split(":")
         if len(host_parts) == 2 and host_parts[1].isdigit():

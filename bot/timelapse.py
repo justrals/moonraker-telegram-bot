@@ -63,6 +63,7 @@ class Timelapse:
 
         self._sched: BaseScheduler = scheduler
         self._chat_id: int = config.secrets.chat_id
+        self._message_thread_id: Optional[int] = config.bot_config.message_thread_id
         self._bot: Bot = bot
 
         self._running: bool = False
@@ -75,6 +76,12 @@ class Timelapse:
             logger.addHandler(logging_handler)
         if config.bot_config.debug:
             logger.setLevel(logging.DEBUG)
+
+    @property
+    def _thread_id_kwargs(self) -> dict:
+        if self._message_thread_id is not None:
+            return {"message_thread_id": self._message_thread_id}
+        return {}
 
     @property
     def enabled(self) -> bool:
@@ -304,6 +311,7 @@ class Timelapse:
             chat_id=self._chat_id,
             text=f"Starting time-lapse assembly for {gcode_name}",
             disable_notification=self._silent_progress,
+            **self._thread_id_kwargs,
         )
 
         if self._executors_pool._work_queue.qsize() > 0:  # pylint: disable=protected-access
@@ -313,7 +321,7 @@ class Timelapse:
         while self._executors_pool._work_queue.qsize() > 0:  # pylint: disable=protected-access
             await asyncio.sleep(1)
 
-        await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.RECORD_VIDEO)
+        await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.RECORD_VIDEO, **self._thread_id_kwargs)
 
         await self.upload_timelapse(lapse_filename, info_mess, gcode_name)
         info_mess = None  # type: ignore

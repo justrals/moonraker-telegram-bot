@@ -32,6 +32,7 @@ class Notifier:
     ):
         self._bot: Bot = bot
         self._chat_id: int = config.secrets.chat_id
+        self._message_thread_id: Optional[int] = config.bot_config.message_thread_id
         self._cam_wrap: Camera = camera_wrapper
 
         self._sched: BaseScheduler = scheduler
@@ -49,6 +50,12 @@ class Notifier:
         self._progress_update_message = config.telegram_ui.progress_update_message
         self._silent_progress: bool = config.telegram_ui.silent_progress
         self._silent_commands: bool = config.telegram_ui.silent_commands
+
+    @property
+    def _thread_id_kwargs(self) -> dict:
+        if self._message_thread_id is not None:
+            return {"message_thread_id": self._message_thread_id}
+        return {}
         self._silent_status: bool = config.telegram_ui.silent_status
         self._pin_status_single_message: bool = config.telegram_ui.pin_status_single_message
         self._status_message_m117_update: bool = config.telegram_ui.status_message_m117_update
@@ -129,7 +136,7 @@ class Notifier:
 
     async def _send_message(self, message: str, silent: bool, group_only: bool = False, manual: bool = False) -> None:
         if not group_only:
-            await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.TYPING)
+            await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.TYPING, **self._thread_id_kwargs)
             if self._status_message and not manual:
                 if self._bzz_mess_id != 0:
                     try:
@@ -144,7 +151,7 @@ class Notifier:
                     await self._status_message.edit_text(text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
                 if self._progress_update_message:
-                    mes = await self._bot.send_message(self._chat_id, text="Status has been updated\nThis message will be deleted", disable_notification=silent)
+                    mes = await self._bot.send_message(self._chat_id, text="Status has been updated\nThis message will be deleted", disable_notification=silent, **self._thread_id_kwargs)
                     self._bzz_mess_id = mes.message_id
             else:
                 sent_message = await self._bot.send_message(
@@ -152,6 +159,7 @@ class Notifier:
                     text=message,
                     parse_mode=ParseMode.MARKDOWN_V2,
                     disable_notification=silent,
+                    **self._thread_id_kwargs,
                 )
                 if not self._status_message and not manual:
                     self._status_message = sent_message
@@ -180,7 +188,7 @@ class Notifier:
         loop = asyncio.get_running_loop()
         with await loop.run_in_executor(self._executors_pool, self._cam_wrap.take_photo) as photo:
             if not group_only:
-                await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.UPLOAD_PHOTO)
+                await self._bot.send_chat_action(chat_id=self._chat_id, action=ChatAction.UPLOAD_PHOTO, **self._thread_id_kwargs)
                 if self._status_message and not manual:
                     if self._bzz_mess_id != 0:
                         try:
@@ -194,7 +202,7 @@ class Notifier:
                     await self._status_message.edit_caption(caption=message, parse_mode=ParseMode.MARKDOWN_V2)
 
                     if self._progress_update_message:
-                        mes = await self._bot.send_message(self._chat_id, text="Status has been updated\nThis message will be deleted", disable_notification=silent)
+                        mes = await self._bot.send_message(self._chat_id, text="Status has been updated\nThis message will be deleted", disable_notification=silent, **self._thread_id_kwargs)
                         self._bzz_mess_id = mes.message_id
 
                 else:
@@ -441,7 +449,7 @@ class Notifier:
                 )
             bio.close()
         else:
-            status_message = await self._bot.send_message(chat_id=self._chat_id, text=message, disable_notification=self.silent_status)
+            status_message = await self._bot.send_message(chat_id=self._chat_id, text=message, disable_notification=self.silent_status, **self._thread_id_kwargs)
             for group_, message_thread_id in self._notify_groups:
                 self._groups_status_mesages[group_] = await self._bot.send_message(chat_id=group_, message_thread_id=message_thread_id, text=message, disable_notification=self.silent_status)
         self._status_message = status_message
@@ -505,7 +513,7 @@ class Notifier:
             for path in paths:
                 path_obj = Path(path)
                 if not path_obj.is_file():
-                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands)
+                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands, **self._thread_id_kwargs)
                     return
 
                 bio = BytesIO()
@@ -515,7 +523,7 @@ class Notifier:
                     bio.write(fh.read())
                 bio.seek(0)
                 if bio.getbuffer().nbytes > 10485760:
-                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a 10mb filesize restriction for images, image couldn't be uploaded: `{path}`")
+                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a 10mb filesize restriction for images, image couldn't be uploaded: `{path}`", **self._thread_id_kwargs)
                 else:
                     if not photos_list:
                         photos_list.append(InputMediaPhoto(bio, filename=bio.name, caption=message))
@@ -527,11 +535,12 @@ class Notifier:
                 self._chat_id,
                 media=photos_list,
                 disable_notification=self._silent_commands,
+                **self._thread_id_kwargs,
             )
 
         except Exception as ex:
             logger.warning(ex)
-            await self._bot.send_message(self._chat_id, text=f"Error sending image: {ex}", disable_notification=self._silent_commands)
+            await self._bot.send_message(self._chat_id, text=f"Error sending image: {ex}", disable_notification=self._silent_commands, **self._thread_id_kwargs)
 
     def send_image(self, ws_message: str) -> None:
         self._sched.add_job(
@@ -549,7 +558,7 @@ class Notifier:
             for path in paths:
                 path_obj = Path(path)
                 if not path_obj.is_file():
-                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands)
+                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands, **self._thread_id_kwargs)
                     return
 
                 bio = BytesIO()
@@ -559,7 +568,7 @@ class Notifier:
                     bio.write(fh.read())
                 bio.seek(0)
                 if bio.getbuffer().nbytes > self._max_upload_file_size * 1024 * 1024:
-                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a {self._max_upload_file_size}mb filesize restriction, video couldn't be uploaded: `{path}`")
+                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a {self._max_upload_file_size}mb filesize restriction, video couldn't be uploaded: `{path}`", **self._thread_id_kwargs)
                 else:
                     if not photos_list:
                         photos_list.append(InputMediaVideo(bio, filename=bio.name, caption=message))
@@ -572,11 +581,12 @@ class Notifier:
                 media=photos_list,
                 disable_notification=self._silent_commands,
                 write_timeout=120,
+                **self._thread_id_kwargs,
             )
 
         except Exception as ex:
             logger.warning(ex)
-            await self._bot.send_message(self._chat_id, text=f"Error sending video: {ex}", disable_notification=self._silent_commands)
+            await self._bot.send_message(self._chat_id, text=f"Error sending video: {ex}", disable_notification=self._silent_commands, **self._thread_id_kwargs)
 
     def send_video(self, ws_message: str) -> None:
         self._sched.add_job(
@@ -594,7 +604,7 @@ class Notifier:
             for path in paths:
                 path_obj = Path(path)
                 if not path_obj.is_file():
-                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands)
+                    await self._bot.send_message(self._chat_id, text="Provided path is not a file", disable_notification=self._silent_commands, **self._thread_id_kwargs)
                     return
 
                 bio = BytesIO()
@@ -604,7 +614,7 @@ class Notifier:
                     bio.write(fh.read())
                 bio.seek(0)
                 if bio.getbuffer().nbytes > self._max_upload_file_size * 1024 * 1024:
-                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a {self._max_upload_file_size}mb filesize restriction, document couldn't be uploaded: `{path}`")
+                    await self._bot.send_message(self._chat_id, text=f"Telegram bots have a {self._max_upload_file_size}mb filesize restriction, document couldn't be uploaded: `{path}`", **self._thread_id_kwargs)
                 else:
                     if not photos_list:
                         photos_list.append(InputMediaDocument(bio, filename=bio.name, caption=message))
@@ -616,11 +626,12 @@ class Notifier:
                 self._chat_id,
                 media=photos_list,
                 disable_notification=self._silent_commands,
+                **self._thread_id_kwargs,
             )
 
         except Exception as ex:
             logger.warning(ex)
-            await self._bot.send_message(self._chat_id, text=f"Error sending document: {ex}", disable_notification=self._silent_commands)
+            await self._bot.send_message(self._chat_id, text=f"Error sending document: {ex}", disable_notification=self._silent_commands, **self._thread_id_kwargs)
 
     def send_document(self, ws_message: str) -> None:
         self._sched.add_job(

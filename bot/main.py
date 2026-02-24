@@ -123,6 +123,12 @@ ws_helper: WebSocketHelper
 executors_pool: ThreadPoolExecutor = ThreadPoolExecutor(2, thread_name_prefix="bot_pool")
 
 
+def _thread_id_kwargs() -> dict:
+    if hasattr(configWrap, 'bot_config') and configWrap.bot_config.message_thread_id is not None:
+        return {"message_thread_id": configWrap.bot_config.message_thread_id}
+    return {}
+
+
 async def echo_unknown(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
@@ -156,7 +162,7 @@ async def status_no_confirm(effective_message: Message) -> None:
         if cameraWrap.enabled:
             loop_loc = asyncio.get_running_loop()
             with await loop_loc.run_in_executor(executors_pool, cameraWrap.take_photo) as bio:
-                await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_PHOTO)
+                await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_PHOTO, **_thread_id_kwargs())
                 await effective_message.reply_photo(
                     photo=bio,
                     caption=mess,
@@ -165,7 +171,7 @@ async def status_no_confirm(effective_message: Message) -> None:
                 )
                 bio.close()
         else:
-            await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+            await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
             await effective_message.reply_text(
                 mess,
                 parse_mode=ParseMode.HTML,
@@ -189,7 +195,7 @@ async def check_unfinished_lapses(bot: telegram.Bot):
     files = cameraWrap.detect_unfinished_lapses()
     if not files:
         return
-    await bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     files_keys: List[List[InlineKeyboardButton]] = list(
         map(
             lambda el: [
@@ -222,6 +228,7 @@ async def check_unfinished_lapses(bot: telegram.Bot):
         text="Unfinished timelapses found\nBuild unfinished timelapse?",
         reply_markup=InlineKeyboardMarkup(files_keys),
         disable_notification=notifier.silent_status,
+        **_thread_id_kwargs(),
     )
 
 
@@ -249,7 +256,7 @@ async def get_video_no_confirm(effective_message: Message) -> None:
             disable_notification=notifier.silent_commands,
             quote=True,
         )
-        await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.RECORD_VIDEO)
+        await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.RECORD_VIDEO, **_thread_id_kwargs())
 
         loop_loc = asyncio.get_running_loop()
         (video_bio, thumb_bio, width, height) = await loop_loc.run_in_executor(executors_pool, cameraWrap.take_video)
@@ -306,7 +313,7 @@ async def command_confirm_message(update: Update, text: str, callback_mess: str)
         logger.warning("Undefined effective message or bot")
         return
 
-    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     await update.effective_message.reply_text(
         text,
         reply_markup=confirm_keyboard(callback_mess),
@@ -320,7 +327,7 @@ async def command_confirm_message_ext(update: Update, command: str, confirm_text
         logger.warning("Undefined effective message or bot")
         return
 
-    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     if configWrap.telegram_ui.is_present_in_require_confirmation(command) or configWrap.telegram_ui.confirm_command():
         await update.effective_message.reply_text(
             confirm_text,
@@ -459,7 +466,7 @@ async def send_logs_no_confirm(effective_message: Message) -> None:
 
     if logs_list:
         await resp_message.edit_text("Uploading logs")
-        await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+        await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT, **_thread_id_kwargs())
         await effective_message.reply_media_group(logs_list, disable_notification=notifier.silent_commands, quote=True, write_timeout=120)
         await resp_message.edit_text(text=f"{await klippy.get_versions_info()}\nUpload logs to analyzer /logs_upload")
     else:
@@ -498,7 +505,7 @@ async def upload_logs_no_confirm(effective_message: Message) -> None:
                 tar.add(Path(f"{configWrap.bot_config.log_path}/{file}"), arcname=file)
 
     await resp_message.edit_text("Uploading logs to parser")
-    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT, **_thread_id_kwargs())
 
     with open(f"{configWrap.bot_config.log_path}/logs.tar.xz", "rb") as log_archive_ojb:
         resp = httpx.post(url="https://coderus.openrepos.net/klipper_logs", files={"tarfile": log_archive_ojb}, follow_redirects=False, timeout=25)
@@ -530,7 +537,7 @@ async def restart_bot() -> None:
 
 
 async def power_toggle_no_confirm(effective_message: Message) -> None:
-    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     if psu_power_device:
         await effective_message.reply_text(
             "Power " + "Off" if psu_power_device.device_state else "On" + " printer?",
@@ -610,8 +617,9 @@ async def button_lapse_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         chat_id=configWrap.secrets.chat_id,
         text=f"Starting time-lapse assembly for {lapse_name}",
         disable_notification=notifier.silent_commands,
+        **_thread_id_kwargs(),
     )
-    await context.bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.RECORD_VIDEO)
+    await context.bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.RECORD_VIDEO, **_thread_id_kwargs())
     await timelapse.upload_timelapse(lapse_name, info_mess)
     info_mess = None  # type: ignore
     await query.delete_message()
@@ -681,7 +689,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.error("Undefined callback_query.data for %s", query.to_json())
         return
 
-    await context.bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await context.bot.send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
 
     await query.answer()
     if query.data == "do_nothing":
@@ -691,7 +699,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 update.effective_message.reply_to_message.message_id,
             )
     elif query.data == "cleanup_timelapse_unfinished":
-        await context.bot.send_message(chat_id=configWrap.secrets.chat_id, text="Removing unfinished timelapses data")
+        await context.bot.send_message(chat_id=configWrap.secrets.chat_id, text="Removing unfinished timelapses data", **_thread_id_kwargs())
         cameraWrap.cleanup_unfinished_lapses()
     elif "gcode:" in query.data:
         await ws_helper.execute_ws_gcode_script(query.data.replace("gcode:", ""))
@@ -806,7 +814,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def get_gcode_files_no_confirm(effective_message: Message) -> None:
-    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     await effective_message.reply_text(
         "Gcode files to print:",
         reply_markup=await gcode_files_keyboard(),
@@ -878,7 +886,7 @@ async def services_keyboard_no_confirm(effective_message: Message) -> None:
     services = configWrap.bot_config.services
     service_keys: List[List[InlineKeyboardButton]] = list(map(create_service_button, services))
 
-    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     await effective_message.reply_text(
         "Services to operate:",
         reply_markup=InlineKeyboardMarkup(service_keys),
@@ -915,7 +923,7 @@ async def exec_gcode(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def get_macros_no_confirm(effective_message: Message) -> None:
-    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING)
+    await effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.TYPING, **_thread_id_kwargs())
     files_keys: List[List[InlineKeyboardButton]] = list(
         map(
             lambda el: [
@@ -977,7 +985,7 @@ async def upload_file(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning("Undefined effective message or bot")
         return
 
-    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+    await update.effective_message.get_bot().send_chat_action(chat_id=configWrap.secrets.chat_id, action=ChatAction.UPLOAD_DOCUMENT, **_thread_id_kwargs())
     doc = update.effective_message.document
     if doc is None or doc.file_name is None:
         await update.effective_message.reply_text(
@@ -1207,6 +1215,7 @@ async def greeting_message(bot: telegram.Bot) -> None:
             parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardMarkup(create_keyboard(), resize_keyboard=True),
             disable_notification=notifier.silent_status,
+            **_thread_id_kwargs(),
         )
 
     await bot.set_my_commands(commands=prepare_commands_list(await klippy.get_macros_force(), configWrap.telegram_ui.include_macros_in_command_list))
